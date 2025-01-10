@@ -1,0 +1,351 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model DTCard {
+  id              String        @id @default(cuid())
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  cardVariantName String
+  jdbRefID        String?
+  isEnabled       Boolean       @default(true)
+  partnerCards    PartnerCard[] @relation("DTCard")
+}
+
+model Admin {
+  id                      String                    @id @default(cuid())
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  email                   String                    @unique
+  name                    String
+  password                String
+  is2FAEnabled            Boolean                   @default(false)
+  isEnabled               Boolean                   @default(true)
+  twoFASecret             String?
+  createdByID             String?
+  createdBy               Admin?                    @relation("CreatedBy", fields: [createdByID], references: [id])
+  createdAdmins           Admin[]                   @relation("CreatedBy")
+  loginLogs               AdminLoginLog[]           @relation("User")
+  createdFloatTxns        FloatTxn[]                @relation("CreatedFloatTxns")
+  createdPartners         Partner[]                 @relation("CreatedPartners")
+  handledCardApplications CardPurchaseApplication[] @relation("CardApplicationProcessedBy")
+
+  handledCardTopupApplications CardTopupApplication[] @relation("CardTopupProcessedBy")
+
+  handledUserCardActivations UserCardActivation[] @relation("UserCardActivationHandledBy")
+}
+
+model AdminLoginLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ip        String
+  userId    String
+  user      Admin    @relation("User", fields: [userId], references: [id])
+}
+
+model Partner {
+  id                   String                  @id @default(cuid())
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  email                String                  @unique
+  name                 String
+  floatBalance         String
+  password             String
+  is2FAEnabled         Boolean                 @default(false)
+  isEnabled            Boolean                 @default(true)
+  twoFASecret          String?
+  floatBalMinThreshold String?
+  createdByID          String?
+  apiKeys              ApiKey[]                @relation("Partner")
+  floatTxns            FloatTxn[]              @relation("PartnerFloatTxn")
+  createdBy            Admin?                  @relation("CreatedPartners", fields: [createdByID], references: [id])
+  cards                PartnerCard[]           @relation("PartnerCards")
+  loginLogs            PartnerLoginLog[]       @relation("User")
+  users                User[]                  @relation("PartnerUser")
+  webhookSettings      PartnerWebhookSetting[] @relation("WebhookSettings")
+}
+
+model PartnerLoginLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ip        String
+  userId    String
+  user      Partner  @relation("User", fields: [userId], references: [id])
+}
+
+model ApiKey {
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  name           String
+  isEnabled      Boolean  @default(true)
+  apiKey         String   @unique
+  apiSecret      String
+  partnerId      String
+  whitelistedIps String?
+  partner        Partner  @relation("Partner", fields: [partnerId], references: [id])
+}
+
+model PartnerCard {
+  id              String                    @id @default(cuid())
+  name            String                    @default("")
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  price           String
+  topupFeePercent String
+  feeStructure    String
+  isEnabled       Boolean                   @default(true)
+  partnerId       String
+  cardId          String
+  cardApplication CardPurchaseApplication[] @relation("CardApplications")
+  card            DTCard                    @relation("DTCard", fields: [cardId], references: [id])
+  partner         Partner                   @relation("PartnerCards", fields: [partnerId], references: [id])
+  userCards       UserCard[]                @relation("UserCardPartnerCard")
+}
+
+model FloatTxn {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  amount      String
+  metadata    String
+  isDebit     Boolean
+  partnerId   String
+  createdById String
+  createdBy   Admin    @relation("CreatedFloatTxns", fields: [createdById], references: [id])
+  partner     Partner  @relation("PartnerFloatTxn", fields: [partnerId], references: [id])
+}
+
+model UserCardActivation {
+  id            String                   @id @default(cuid())
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  imgName       String
+  failedRemarks String?
+  handledByID   String?
+  userCardId    String                   @unique
+  userCard      UserCard                 @relation(fields: [userCardId], references: [id])
+  handledBy     Admin?                   @relation("UserCardActivationHandledBy", fields: [handledByID], references: [id])
+  status        UserCardActivationStatus @default(NOT_INITIALIZED)
+  name          String
+}
+
+model User {
+  id             String                    @id @default(cuid())
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  fullName       String
+  passportNumber String
+  email          String                    @unique
+  isEnabled      Boolean                   @default(true)
+  partnerId      String
+  applications   CardPurchaseApplication[] @relation("UserCardPurchaseApplication")
+  partner        Partner                   @relation("PartnerUser", fields: [partnerId], references: [id])
+  cards          UserCard[]                @relation("UserCards")
+  accountInfo    UserAccountInfo?          @relation("UserInfo")
+}
+
+model UserAccountInfo {
+  id                String              @id @default(cuid())
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  metadata          String
+  userId            String              @unique
+  user              User                @relation("UserInfo", fields: [userId], references: [id])
+  status            UserInfoStatus      @default(NOT_INITIALIZED)
+  failedRemarks     String?
+  documents         UserDocument[]      @relation("UserDocument")
+}
+
+model UserDocument {
+  id             String             @id @default(cuid())
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  fileName       String
+  documentType   String
+  userInfoId     String
+  documentStatus UserDocumentStatus
+  failedRemarks  String?
+  userInfo       UserAccountInfo    @relation("UserDocument", fields: [userInfoId], references: [id])
+  jdbDocRef JDBUploadDocument?
+}
+
+model UserCard {
+  id                   String                  @id @default(cuid())
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  pcid                 String
+  userId               String
+  embossName           String
+  cardNumber           String                  @unique
+  accountNumber        String
+  isEnabled            Boolean                 @default(true)
+  isMemberCard         Boolean                 @default(false)
+  applicationId        String                  @unique
+  application          CardPurchaseApplication @relation("CardPurchaseApplication", fields: [applicationId], references: [id])
+  card                 PartnerCard             @relation("UserCardPartnerCard", fields: [pcid], references: [id])
+  user                 User                    @relation("UserCards", fields: [userId], references: [id])
+  cardTopupApplication CardTopupApplication[]  @relation("CardTopupApplications")
+  cardActivation       UserCardActivation?
+}
+
+
+
+model CardTopupApplication {
+  id              String          @id @default(cuid())
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  requestedAmount String
+  userCardId      String
+  userCard        UserCard        @relation("CardTopupApplications", fields: [userCardId], references: [id])
+  finalAmount     String?
+  fee             String?
+  feeDetails      String?
+  processedById   String?
+  processedBy     Admin?          @relation("CardTopupProcessedBy", fields: [processedById], references: [id])
+  failedRemarks   String?
+  status          CardTopUpStatus @default(NOT_INITIALIZED)
+}
+
+model PartnerWebhookSetting {
+  id                       String           @id @default(cuid())
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+  partnerId                String
+  webhookName              String
+  partner                  Partner          @relation("WebhookSettings", fields: [partnerId], references: [id])
+  targetUrl                String
+  secretKey                String           @unique
+  algoType                 String
+  isResendOnFailureEnabled Boolean          @default(true)
+  webhookRequests          WebhookRequest[] @relation("WebhookRequests")
+  isEnabled                Boolean          @default(true)
+}
+
+model WebhookRequest {
+  id               String                @id @default(cuid())
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  payloadData      String
+  noOfRetries      Int                   @default(0)
+  status           WebhookRequestStatus  @default(NOT_INITIALIZED)
+  firstSent        DateTime?
+  lastSent         DateTime?
+  httpCode         Int?
+  webhookSettingId String
+  webhookSetting   PartnerWebhookSetting @relation("WebhookRequests", fields: [webhookSettingId], references: [id])
+  errorMessage     String?
+}
+
+
+
+
+
+model CardPurchaseApplication {
+  id                  String                        @id @default(cuid())
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+  embossName          String
+  cardDeliveryAddress String
+  userId              String
+  user                User                          @relation("UserCardPurchaseApplication", fields: [userId], references: [id])
+  status              CardPurchaseApplicationStatus @default(NOT_INITIALIZED)
+  pcid                String
+  ucid                String?
+  card                PartnerCard                   @relation("CardApplications", fields: [pcid], references: [id])
+  handledById         String?
+  feeDetails          String?
+  handledBy           Admin?                        @relation("CardApplicationProcessedBy", fields: [handledById], references: [id])
+  userCard            UserCard?                     @relation("CardPurchaseApplication")
+  remarks             String?
+  cardNumber          String?
+  accountNumber       String?
+  jdbOpenAccountRequest JDBOpenAccountRequest?
+}
+
+
+model JDBUploadDocument {
+  id                String                  @id @default(cuid())
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  jdbDocName         String?
+  userDocId String @unique
+  userDocument UserDocument @relation(fields: [userDocId],references: [id])
+  accountOpenRequestId String
+  accountOpenRequest  JDBOpenAccountRequest @relation(fields: [accountOpenRequestId],references: [id])
+  status            JDBUploadDocumentStatus @default(NOT_INITIALIZED)
+}
+
+model JDBOpenAccountRequest {
+  id                String                  @id @default(cuid())
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  cardApplicationId String                  @unique
+  cardApplication   CardPurchaseApplication @relation(fields: [cardApplicationId], references: [id])
+  batchNo           String? @unique
+  idFrom            String? @unique
+  status            JDBOpenAccountStatus    @default(NOT_INITIALIZED)
+  documents JDBUploadDocument[]
+}
+
+
+
+
+enum WebhookRequestStatus {
+  NOT_INITIALIZED
+  RETRY
+  SUCCESS
+  FAILED
+}
+
+enum CardTopUpStatus {
+  NOT_INITIALIZED
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum UserDocumentStatus {
+  NOT_INITIALIZED
+  SUCCESS
+  FAILED
+}
+
+enum UserCardActivationStatus {
+  NOT_INITIALIZED
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum UserInfoStatus {
+  NOT_INITIALIZED
+  SUCCESS
+  FAILED
+}
+
+enum CardPurchaseApplicationStatus {
+  NOT_INITIALIZED
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum JDBUploadDocumentStatus {
+  NOT_INITIALIZED
+  SUCCESS
+  FAILED
+}
+
+enum JDBOpenAccountStatus {
+  NOT_INITIALIZED
+  SUCCESS
+  FAILED
+}
